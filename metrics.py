@@ -62,25 +62,31 @@ def quaternion_to_angle_axis(quaternion: torch.Tensor) -> torch.Tensor:
     return angle_axis
 
 
-def maybe_reduce(t, reduction):
-    if not reduction:
-        return t
-    return t.mean()
+def maybe_reduce(func):
+    def reduce_wrapper(*args, reduction='mean', **kwargs):
+        results = func(*args, **kwargs)
+        if not reduction:
+            return results
+        return results.mean()
+
+    return reduce_wrapper
 
 
-def translation_error(pred: torch.Tensor, gt: torch.Tensor, reduction='mean') -> torch.Tensor:
+@maybe_reduce
+def translation_error(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
     assert pred.shape[1:] == gt.shape[1:] == (3,)
     pred = F.normalize(pred)
     gt = F.normalize(gt)
     inner = (pred * gt).sum(dim=1)
     angular_error = inner.acos()
-    return maybe_reduce(angular_error, reduction)
+    return angular_error
 
 
-def quat_error(pred: torch.Tensor, gt: torch.Tensor, reduction='mean') -> torch.Tensor:
+@maybe_reduce
+def quat_error(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
     assert pred.shape[1:] == gt.shape[1:] == (4,)
     inv_gt = inverse_quat(gt)
     product = compose_quat(inv_gt, pred)
     angle_axis = quaternion_to_angle_axis(product)
     error = torch.norm(angle_axis, dim=1) * 180 / math.pi
-    return maybe_reduce(error, reduction)
+    return error
