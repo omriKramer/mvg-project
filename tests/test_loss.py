@@ -6,9 +6,7 @@ from scipy.spatial.transform.rotation import Rotation as R
 import numpy as np
 
 import metrics
-
-BS = 4
-EPS = 1e-8
+from tests.constants import BS, EPS
 
 
 def test_translation_error():
