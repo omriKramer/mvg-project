@@ -1,76 +1,91 @@
-import torch
-import config
 import os
-import numpy as np
+from pathlib import Path
+
 import cv2
+import numpy as np
+import pandas as pd
+import torch
 import torchvision.transforms as transforms
+from scipy.spatial.transform import Rotation as R
+from torch.utils.data import Dataset, DataLoader
+
+import config
 
 
-class ImagePair():
+class ImagePair:
+    # Initialize Transformation
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        config.imgs_normalization,
+    ])
+
     def __init__(self, pair_path):
-        # Initialize Transformation
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            config.imgs_normalization,
-        ])
-
         # Get GT
-        GT_path = os.path.join(pair_path, 'GT')
-        self.R_GT = torch.from_numpy(np.load(os.path.join(GT_path, 'GT_R12.npy'))).float()
-        self.t_GT = torch.from_numpy(np.load(os.path.join(GT_path, 'GT_t12.npy'))).float()
+        gt_path = os.path.join(pair_path, 'GT')
+        self.R_GT = R.from_matrix(np.load(os.path.join(gt_path, 'GT_R12.npy')))
+        self.t_GT = np.load(os.path.join(gt_path, 'GT_t12.npy')).flatten()
 
         # Get inputs
         inputs_path = os.path.join(pair_path, 'inputs')
-        self.K1 = torch.from_numpy(np.load(os.path.join(inputs_path, 'K1.npy'))).float()
-        self.K2 = torch.from_numpy(np.load(os.path.join(inputs_path, 'K2.npy'))).float()
+        self.K1 = np.load(os.path.join(inputs_path, 'K1.npy'))
+        self.K2 = np.load(os.path.join(inputs_path, 'K2.npy'))
 
-        # TODO Normalize points if using
-        self.pts1 = torch.from_numpy(np.load(os.path.join(inputs_path, 'points1.npy'))).float()
-        self.pts2 = torch.from_numpy(np.load(os.path.join(inputs_path, 'points2.npy'))).float()
+        # TODO: Normalize points if using
+        self.pts1 = np.load(os.path.join(inputs_path, 'points1.npy'))
+        self.pts2 = np.load(os.path.join(inputs_path, 'points2.npy'))
 
-        self.im1 = self.transform(cv2.imread(os.path.join(inputs_path, 'im1.jpg')))
-        self.im2 = self.transform(cv2.imread(os.path.join(inputs_path, 'im2.jpg')))
+        self.im1 = cv2.imread(os.path.join(inputs_path, 'im1.jpg'))
+        self.im2 = cv2.imread(os.path.join(inputs_path, 'im2.jpg'))
 
-
-class ImagePairsScene():
-    def __init__(self, path):
-        self.path = path
-        self.len = len(os.listdir(path))
-
-    def get_len(self):
-        return self.len
-
-    def get_pair(self, idx):
-        return ImagePair(os.path.join(self.path, str(idx + 1)))
+    @property
+    def data(self):
+        x = self.transform(self.im1), self.transform(self.im2)
+        y = torch.from_numpy(self.t_GT).float(), torch.from_numpy(self.R_GT.as_quat()).float(),
+        return x, y
 
 
-class ImagePairsDataset(torch.utils.data.Dataset):
-    def __init__(self):
+class ImagePairsDataset(Dataset):
+    def __init__(self, items, path):
         # Initialize variable
-        self.dataset_path = config.dataset_path
-        scenes_list = os.listdir(self.dataset_path)
-        self.scene_indices = np.zeros(0, dtype=np.int)
-        self.scenes = []
-        curr_idx = 0
-
-        for scene_path in scenes_list:
-            scene = ImagePairsScene(os.path.join(self.dataset_path, scene_path))
-            self.scene_indices = np.append(self.scene_indices, curr_idx + scene.get_len())
-            self.scenes.append(scene)
-            curr_idx += scene.get_len()
-
-        self.len = curr_idx
+        self.path = Path(path)
+        self.items = items
 
     def __len__(self):
-        return self.len
+        return len(self.items)
 
     def __getitem__(self, idx):
-        scene_idx = np.argwhere(self.scene_indices > idx)[0][0]
-        if scene_idx != 0:
-            pair_idx = idx - self.scene_indices[scene_idx - 1]
-        else:
-            pair_idx = idx
-
-        return self.scenes[scene_idx].get_pair(pair_idx)
+        pair_path = self.path / self.items[idx]
+        image_pair = ImagePair(pair_path)
+        return image_pair.data
 
 
+class Data:
+
+    def __init__(self, train_ds, valid_ds, bs=16, num_workers=16):
+        self.train_ds = train_ds
+        self.valid_ds = valid_ds
+        self.bs = bs
+        self.num_workers = min(num_workers, bs)
+
+    def _dl(self, ds, **kwargs):
+        bs = kwargs.pop('batch_size', self.bs)
+        num_workers = kwargs.pop('num_workers', self.num_workers)
+        return DataLoader(ds, batch_size=bs, num_workers=num_workers, **kwargs)
+
+    def train_dl(self, shuffle=True, **kwargs):
+        return self._dl(self.train_ds, shuffle=shuffle, **kwargs)
+
+    def valid_dl(self, shuffle=False, **kwargs):
+        return self._dl(self.valid_ds, shuffle=shuffle, **kwargs)
+
+
+def trainval_ds(path, csv_path, **kwargs):
+    df = pd.read_csv(csv_path)
+    is_val = df['is_val']
+    train_items = df['item'][~is_val].tolist()
+    val_items = df['item'][is_val].tolist()
+
+    train_ds = ImagePairsDataset(train_items, path)
+    val_ds = ImagePairsDataset(val_items, path)
+    data = Data(train_ds, val_ds, **kwargs)
+    return data

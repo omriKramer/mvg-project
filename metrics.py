@@ -1,6 +1,8 @@
+import math
+
+import numpy as np
 import torch
 import torch.nn.functional as F
-import math
 
 
 def compose_quat(p, q):
@@ -74,7 +76,8 @@ def maybe_reduce(func):
 
 @maybe_reduce
 def translation_error(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
-    assert pred.shape[1:] == gt.shape[1:] == (3,)
+    assert pred.shape[1:] == (3,), f'got pred of shape {pred.shape}'
+    assert gt.shape[1:] == (3,), f'got gt of shape {gt.shape}'
     pred = F.normalize(pred)
     gt = F.normalize(gt)
     inner = (pred * gt).sum(dim=1)
@@ -84,9 +87,58 @@ def translation_error(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
 
 @maybe_reduce
 def quat_error(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
-    assert pred.shape[1:] == gt.shape[1:] == (4,)
+    assert pred.shape[1:] == (4,), f'got pred of shape {pred.shape}'
+    assert gt.shape[1:] == (4,), f'got gt of shape {gt.shape}'
     inv_gt = inverse_quat(gt)
     product = compose_quat(inv_gt, pred)
     angle_axis = quaternion_to_angle_axis(product)
     error = torch.norm(angle_axis, dim=1) * 180 / math.pi
     return error
+
+
+def translation_rotation_loss(pred, gt):
+    t_pred, r_pred = pred
+    t_gt, r_gt = gt
+    r_err = quat_error(r_pred, r_gt)
+    t_err = translation_error(t_pred, t_gt)
+    loss = t_err + r_err
+    return loss
+
+
+class RelativePoseMetric:
+
+    def __init__(self):
+        self._reset()
+
+    def _reset(self):
+        self.r_errors = []
+        self.t_errors = []
+
+    def on_epoch_begin(self):
+        self._reset()
+
+    def __call__(self, pred, gt):
+        t_pred, r_pred = pred
+        t_gt, r_gt = gt
+
+        r_err = quat_error(r_pred, r_gt, reduction=None)
+        self.r_errors.extend(r_err.cpu().tolist())
+
+        t_err = translation_error(t_pred, t_gt, reduction=None)
+        self.t_errors.extend(t_err.cpu().tolist())
+
+    def errors(self):
+        r_errors = np.array(self.r_errors)
+        t_errors = np.array(self.t_errors)
+        return {
+            'R mean': r_errors.mean(),
+            't mean': t_errors.mean(),
+            'R median': np.median(r_errors),
+            't median': np.median(t_errors)
+        }
+
+    def __str__(self):
+        errors = self.errors()
+        strings = [f'{k}: {e:.4}' for k, e in errors.items()]
+        msg = ', '.join(strings)
+        return msg

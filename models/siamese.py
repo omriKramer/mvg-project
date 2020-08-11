@@ -12,9 +12,18 @@ resnet_dict = {
 }
 
 
+def init_non_bn(m: nn.Module):
+    if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+        return
+    if hasattr(m, 'weight'):
+        nn.init.kaiming_normal_(m.weight)
+    if hasattr(m, 'bias') and hasattr(m.bias, 'data'):
+        m.bias.data.fill_(0.)
+
+
 class Siamese(nn.Module):
 
-    def __init__(self, bb, reg_head):
+    def __init__(self, bb: nn.Module, reg_head: nn.Module):
         super().__init__()
         self.bb = bb
         self.reg_head = reg_head
@@ -37,7 +46,9 @@ def basic_head(nf: int, ps=0.5):
     layers = [pool, basic.Flatten()]
     for ni, no, p, actn in zip(ftrs[:-1], ftrs[1:], ps, actns):
         layers += basic.bn_drop_lin(ni, no, True, p, actn)
-    return nn.Sequential(*layers)
+    head = nn.Sequential(*layers)
+    init_non_bn(head)
+    return head
 
 
 def resnet_body(arch, pretrained):
@@ -46,8 +57,8 @@ def resnet_body(arch, pretrained):
     return nn.Sequential(*list(model.children())[:-2])
 
 
-def basic_siamese(arc='34', pretrained=True):
-    arch, nf = resnet_dict[arc]
+def basic_siamese(arch='34', pretrained=True):
+    arch, nf = resnet_dict[arch]
     bb = resnet_body(arch, pretrained)
     head = basic_head(nf * 2)
     net = Siamese(bb, head)
