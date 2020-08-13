@@ -28,7 +28,7 @@ def main(data_dir):
     bb_params = [p for p in model.bb.parameters() if p.requires_grad]
     opt = optim.Adam([
         {'params': bb_params, 'lr': 1e-3},
-        {'params': model.reg_head.parameters()}
+        {'params': model.reg_head.parameters(), 'weight_decay': 1e-2}
     ], lr=1e-2)
 
     save_clbk = train.SaveCallback.partial(path=root_dir / 'trained_models', name='vanilla')
