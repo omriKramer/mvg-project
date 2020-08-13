@@ -30,7 +30,8 @@ def split(self, at):
 
 class Trainer:
 
-    def __init__(self, model: nn.Module, data, loss_func, opt, device=torch.device('cuda'), callbacks=None):
+    def __init__(self, model: nn.Module, data, loss_func, opt, device=torch.device('cuda'), callbacks=None,
+                 show_progress=True):
         self.device = device
         self.model = model.to(device)
         self.data = data
@@ -39,6 +40,7 @@ class Trainer:
         self.opt = opt
         callbacks = utils.listify(callbacks)
         self.callbacks = [clbk(self) for clbk in callbacks]
+        self.show_progress = show_progress
 
     def fit(self, epochs, metrics=None):
         metrics = utils.listify(metrics)
@@ -63,7 +65,7 @@ class Trainer:
         running_loss = 0.0
         n_items = 0
 
-        for batch in utils.progress_bar(self.data.train_dl()):
+        for batch in self.train_dl():
             xb, yb = to_device(batch, self.device)
             self.opt.zero_grad()
             outputs = self.model(*utils.listify(xb))
@@ -81,7 +83,7 @@ class Trainer:
         running_loss = 0.0
         n_items = 0
 
-        for batch in utils.progress_bar(self.data.valid_dl()):
+        for batch in self.valid_dl():
             xb, yb = to_device(batch, self.device)
             outputs = self.model(*utils.listify(xb))
             loss = self.loss_func(outputs, yb)
@@ -98,3 +100,14 @@ class Trainer:
             'optimizers': self.opt.state_dict()
         }
         torch.save(state, path)
+
+    def _dl(self, dl):
+        if self.show_progress:
+            return utils.progress_bar(dl)
+        return dl
+
+    def train_dl(self):
+        return self._dl(self.data.train_dl())
+
+    def valid_dl(self):
+        return self._dl(self.data.valid_dl())

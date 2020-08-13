@@ -17,7 +17,7 @@ def freeze_except_bn(m: nn.Module):
             p.requires_grad = False
 
 
-def main(data_dir):
+def main(data_dir, show_progress):
     root_dir = Path(__file__).parents[1]
     csv_path = root_dir / 'trainval.csv'
     data = ImagePairsDataset.trainval_ds(data_dir, csv_path)
@@ -32,9 +32,9 @@ def main(data_dir):
     ], lr=1e-2)
 
     save_clbk = train.SaveCallback.partial(path=root_dir / 'trained_models', name='vanilla')
-    trainer = train.Trainer(model, data, metrics.translation_rotation_loss, opt, callbacks=save_clbk)
-
-    trainer.fit(3, metrics=metrics.RelativePoseMetric())
+    trainer = train.Trainer(model, data, metrics.translation_rotation_loss, opt, callbacks=save_clbk,
+                            show_progress=show_progress)
+    trainer.fit(10, metrics=metrics.RelativePoseMetric())
 
 
 if __name__ == '__main__':
@@ -42,5 +42,6 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('data')
+    parser.add_argument('--show-progress', action='store_true')
     args = parser.parse_args()
-    main(args.data)
+    main(args.data, args.show_progress)
