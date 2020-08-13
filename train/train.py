@@ -30,13 +30,13 @@ def split(self, at):
 
 class Trainer:
 
-    def __init__(self, model: nn.Module, data, loss_func, optimizers, device=torch.device('cuda'), callbacks=None):
+    def __init__(self, model: nn.Module, data, loss_func, opt, device=torch.device('cuda'), callbacks=None):
         self.device = device
         self.model = model.to(device)
         self.data = data
         self.loss_func = loss_func
         self.layer_groups = [nn.Sequential(*list(self.model.children()))]
-        self.optimizers = optimizers if isinstance(optimizers, list) else [optimizers]
+        self.opt = opt
         callbacks = utils.listify(callbacks)
         self.callbacks = [clbk(self) for clbk in callbacks]
 
@@ -65,13 +65,11 @@ class Trainer:
 
         for batch in utils.progress_bar(self.data.train_dl()):
             xb, yb = to_device(batch, self.device)
-            for opt in self.optimizers:
-                opt.zero_grad()
+            self.opt.zero_grad()
             outputs = self.model(*utils.listify(xb))
             loss = self.loss_func(outputs, yb)
             loss.backward()
-            for opt in self.optimizers:
-                opt.step()
+            self.opt.step()
             running_loss += loss.item() * len(xb)
             n_items += len(xb)
 
@@ -95,10 +93,8 @@ class Trainer:
         return running_loss / n_items
 
     def save(self, path):
-        model_dict = self.model.state_dict()
-        opt_dicts = [opt.state_dict for opt in self.optimizers]
         state = {
-            'model': model_dict,
-            'optimizers': opt_dicts
+            'model': self.model.state_dict(),
+            'optimizers': self.opt.state_dict()
         }
         torch.save(state, path)
