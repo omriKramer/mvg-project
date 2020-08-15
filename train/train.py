@@ -70,12 +70,17 @@ class Trainer:
             self.opt.zero_grad()
             outputs = self.model(*utils.listify(xb))
             loss = self.loss_func(outputs, yb)
-            loss.backward()
-            self.opt.step()
+            self._backward(loss)
             running_loss += loss.item() * len(xb)
             n_items += len(xb)
 
         return running_loss / n_items
+
+    def _backward(self, loss):
+        loss.backward()
+        self.opt.step()
+        for clbk in self.callbacks:
+            clbk.on_backward_end()
 
     @torch.no_grad()
     def evaluate(self, metrics):

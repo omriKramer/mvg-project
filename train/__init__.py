@@ -1,2 +1,2 @@
-from .callback import SaveCallback
+from .callback import SaveCallback, GradientClipping
 from .train import Trainer

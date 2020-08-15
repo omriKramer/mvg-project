@@ -1,6 +1,8 @@
 from functools import partial
 from pathlib import Path
 
+from torch import nn
+
 from .train import Trainer
 
 
@@ -19,6 +21,9 @@ class Callback:
     def on_epoch_end(self, epoch):
         pass
 
+    def on_backward_end(self):
+        pass
+
 
 class SaveCallback(Callback):
 
@@ -30,3 +35,13 @@ class SaveCallback(Callback):
 
     def on_epoch_end(self, epoch):
         self.trainer.save(self.path / f'{self.name}_{epoch}.pt')
+
+
+class GradientClipping(Callback):
+
+    def __init__(self, trainer, norm=1.):
+        super().__init__(trainer)
+        self.norm = norm
+
+    def on_backward_end(self):
+        nn.utils.clip_grad_norm_(self.trainer.model.parameters(), self.norm)

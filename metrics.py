@@ -80,7 +80,7 @@ def translation_error(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
     assert gt.shape[1:] == (3,), f'got gt of shape {gt.shape}'
     pred = F.normalize(pred)
     gt = F.normalize(gt)
-    inner = (pred * gt).sum(dim=1)
+    inner = (pred * gt).sum(dim=1).clamp(-1, 1)
     angular_error = inner.acos()
     return angular_error
 
@@ -102,6 +102,7 @@ def translation_rotation_loss(pred, gt):
     r_err = quat_error(r_pred, r_gt)
     t_err = translation_error(t_pred, t_gt)
     loss = t_err + r_err
+    assert not torch.isnan(loss)
     return loss
 
 

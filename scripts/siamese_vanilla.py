@@ -32,7 +32,7 @@ def main(data_dir, show_progress):
     ], lr=1e-2)
 
     save_clbk = train.SaveCallback.partial(path=root_dir / 'trained_models', name='vanilla')
-    trainer = train.Trainer(model, data, metrics.translation_rotation_loss, opt, callbacks=save_clbk,
+    trainer = train.Trainer(model, data, metrics.translation_rotation_loss, opt, callbacks=[save_clbk],
                             show_progress=show_progress)
     trainer.fit(10, metrics=metrics.RelativePoseMetric())
 
