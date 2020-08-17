@@ -102,9 +102,15 @@ class Trainer:
     def save(self, path):
         state = {
             'model': self.model.state_dict(),
-            'optimizers': self.opt.state_dict()
+            'optimizer': self.opt.state_dict()
         }
         torch.save(state, path)
+
+    def load(self, path, model_only=False):
+        state_dict = torch.load(path)
+        self.model.load_state_dict(state_dict['model'])
+        if not model_only:
+            self.opt.load_state_dict(state_dict['optimizer'])
 
     def _dl(self, dl):
         if self.show_progress:

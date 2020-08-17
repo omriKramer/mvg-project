@@ -9,6 +9,7 @@ def compose_quat(p, q):
     scalar = p[:, 3] * q[:, 3] - torch.sum(p[:, :3] * q[:, :3], dim=1)
     axis = (p[:, None, 3] * q[:, :3] + q[:, None, 3] * p[:, :3] + torch.cross(p[:, :3], q[:, :3]))
     product = torch.cat((axis, scalar[:, None]), dim=1)
+    product = F.normalize(product)
     return product
 
 
@@ -96,10 +97,34 @@ def quat_error(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
     return error
 
 
-def translation_rotation_loss(pred, gt):
+def translation_rotation_loss(pred, gt, normalize=True):
     t_pred, r_pred = pred
     t_gt, r_gt = gt
+    if normalize:
+        r_pred = F.normalize(r_pred).clamp(-1, 1)
     r_err = quat_error(r_pred, r_gt)
+    t_err = translation_error(t_pred, t_gt)
+    loss = t_err + r_err
+    assert not torch.isnan(loss)
+    return loss
+
+
+@maybe_reduce
+def quat_error2(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
+    assert pred.shape[1:] == (4,), f'got pred of shape {pred.shape}'
+    assert gt.shape[1:] == (4,), f'got gt of shape {gt.shape}'
+    inv_gt = inverse_quat(gt)
+    product = compose_quat(inv_gt, pred).clamp(-1, 1)
+    theta_rad = torch.acos(product[:, 3]) * 2
+    return torch.abs(theta_rad * 180 / math.pi)
+
+
+def translation_rotation_loss2(pred, gt, normalize=True):
+    t_pred, r_pred = pred
+    t_gt, r_gt = gt
+    if normalize:
+        r_pred = F.normalize(r_pred).clamp(-1, 1)
+    r_err = quat_error2(r_pred, r_gt)
     t_err = translation_error(t_pred, t_gt)
     loss = t_err + r_err
     assert not torch.isnan(loss)
@@ -122,6 +147,7 @@ class RelativePoseMetric:
         t_pred, r_pred = pred
         t_gt, r_gt = gt
 
+        r_pred = F.normalize(r_pred)
         r_err = quat_error(r_pred, r_gt, reduction=None)
         self.r_errors.extend(r_err.cpu().tolist())
 

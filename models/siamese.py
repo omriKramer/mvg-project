@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torchvision.models import resnet
 
@@ -34,7 +33,6 @@ class Siamese(nn.Module):
         f = torch.cat((f1, f2), dim=1)
         out = self.reg_head(f)
         t, rot = out.split([3, 4], dim=1)
-        rot = F.normalize(rot)
         return t, rot
 
 
