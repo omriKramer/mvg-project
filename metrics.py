@@ -79,8 +79,8 @@ def maybe_reduce(func):
 def translation_error(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
     assert pred.shape[1:] == (3,), f'got pred of shape {pred.shape}'
     assert gt.shape[1:] == (3,), f'got gt of shape {gt.shape}'
-    pred = F.normalize(pred)
-    gt = F.normalize(gt)
+    pred = F.normalize(pred).clamp(-1, 1)
+    gt = F.normalize(gt).clamp(-1, 1)
     inner = (pred * gt).sum(dim=1).clamp(-1, 1)
     angular_error = inner.acos()
     return angular_error

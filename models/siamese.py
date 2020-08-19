@@ -31,22 +31,27 @@ class Siamese(nn.Module):
         f1 = self.bb(img1)
         f2 = self.bb(img2)
         f = torch.cat((f1, f2), dim=1)
-        out = self.reg_head(f)
-        t, rot = out.split([3, 4], dim=1)
+        t, rot = self.reg_head(f)
         return t, rot
 
 
-def basic_head(nf: int, ps=0.5):
-    ftrs = [nf * 2, 512, 7]
-    ps = [ps / 2, ps]
-    actns = [nn.ReLU(inplace=True), None]
-    pool = basic.AdaptiveConcatPool2d()
-    layers = [pool, basic.Flatten()]
-    for ni, no, p, actn in zip(ftrs[:-1], ftrs[1:], ps, actns):
-        layers += basic.bn_drop_lin(ni, no, True, p, actn)
-    head = nn.Sequential(*layers)
-    init_non_bn(head)
-    return head
+class Head(nn.Module):
+
+    def __init__(self, nf):
+        super().__init__()
+        self.layers = nn.Sequential(
+            basic.AdaptiveConcatPool2d(),
+            basic.Flatten(),
+            *basic.bn_drop_lin(nf, 512, bn=True, p=0.25, actn=nn.ReLU(inplace=True))
+        )
+        self.rot_head = nn.Sequential(*basic.bn_drop_lin(512, 4, bn=True, p=0.5))
+        self.t_head = nn.Sequential(*basic.bn_drop_lin(512, 3, bn=True, p=0.5))
+
+    def forward(self, x):
+        x = self.layers(x)
+        rot = self.rot_head(x)
+        t = self.t_head(x)
+        return t, rot
 
 
 def resnet_body(arch, pretrained):
@@ -58,6 +63,6 @@ def resnet_body(arch, pretrained):
 def basic_siamese(arch='34', pretrained=True):
     arch, nf = resnet_dict[arch]
     bb = resnet_body(arch, pretrained)
-    head = basic_head(nf * 2)
+    head = Head(nf * 2)
     net = Siamese(bb, head)
     return net
