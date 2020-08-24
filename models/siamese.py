@@ -42,7 +42,7 @@ class Head(nn.Module):
         self.layers = nn.Sequential(
             basic.AdaptiveConcatPool2d(),
             basic.Flatten(),
-            *basic.bn_drop_lin(nf, 512, bn=True, p=0.25, actn=nn.ReLU(inplace=True))
+            *basic.bn_drop_lin(nf * 2, 512, bn=True, p=0.25, actn=nn.ReLU(inplace=True))
         )
         self.rot_head = nn.Sequential(*basic.bn_drop_lin(512, 4, bn=True, p=0.5))
         self.t_head = nn.Sequential(*basic.bn_drop_lin(512, 3, bn=True, p=0.5))
