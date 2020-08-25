@@ -3,6 +3,7 @@ import math
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch import nn
 
 
 def compose_quat(p, q):
@@ -129,6 +130,22 @@ def translation_rotation_loss2(pred, gt, normalize=True):
     loss = t_err + r_err
     assert not torch.isnan(loss)
     return loss
+
+
+class L2Loss(nn.module):
+
+    def __init__(self, beta=1):
+        super().__init__()
+        self.mse = nn.MSELoss()
+        self.beta = beta
+
+    def forward(self, pred, gt):
+        t_pred, r_pred = pred
+        t_gt, r_gt = gt
+        r_err = self.mse(r_pred, r_gt)
+        t_err = self.mse(t_pred, t_gt)
+        loss = t_err + self.beta * r_err
+        return loss
 
 
 class RelativePoseMetric:
