@@ -132,7 +132,7 @@ def translation_rotation_loss2(pred, gt, normalize=True):
     return loss
 
 
-class L2Loss(nn.module):
+class L2Loss(nn.Module):
 
     def __init__(self, beta=1):
         super().__init__()
