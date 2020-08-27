@@ -15,10 +15,10 @@ class RandomSwitchImages:
     def __call__(self, item):
         if self.p < random.random():
             return item
-        (img1, img2), (t_gt, r_gt), pts, Ks = item
+        (img1, img2), (t_gt, r_gt), (pts1, pts2), (K1, K2) = item
         new_r = r_gt.inv()
         new_t = new_r.apply(-t_gt)
-        return (img2, img1), (new_t, new_r), pts, Ks
+        return (img2, img1), (new_t, new_r), (pts2, pts1), (K2, K1)
 
     def __repr__(self):
         return f'{self.__class__.__name__}(p={self.p})'
