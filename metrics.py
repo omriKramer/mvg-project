@@ -4,6 +4,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
+import config
+import utils
 
 
 def compose_quat(p, q):
@@ -132,7 +134,7 @@ def translation_rotation_loss2(pred, gt, normalize=True):
     return loss
 
 
-class L2Loss(nn.module):
+class L2Loss(nn.Module):
 
     def __init__(self, beta=1):
         super().__init__()
@@ -186,3 +188,42 @@ class RelativePoseMetric:
         strings = [f'{k}: {e:.4}' for k, e in errors.items()]
         msg = ', '.join(strings)
         return msg
+
+
+class SymmetricEpipolarDist(nn.Module):
+    # def __init__(self):
+    #     super.__init__()
+
+    def forward(self, pred, gt, pts, Ksb):
+        t_pred, r_pred = pred
+        t_gt, r_gt = gt
+        pts1, pts2 = pts
+        K1, K2 = Ksb
+
+        # Get points
+        legal_pts = ((pts1[:, 0:2, :] != 0).sum(dim=1) != 0)
+
+        # Get F
+        F_pred = utils.get_fundamental_mat(t_pred, r_pred, K1, K2)
+        F_gt = utils.get_fundamental_mat(t_gt, r_gt, K1, K2)
+
+        pFp = torch.abs((pts2 * torch.bmm(F_pred, pts1)).sum(dim=1))
+        sed_err = pFp * (1 / torch.bmm(F_pred, pts1)[:,0:2, :].norm(p=2, dim=1) + 1 / torch.bmm(F_pred.transpose(1,2), pts2)[:,0:2, :].norm(p=2, dim=1))
+
+        # sanity Check
+        pFp_gt = torch.abs((pts2 * torch.bmm(F_gt, pts1)).sum(dim=1))
+        sed_err_gt = pFp_gt * (1 / torch.bmm(F_gt, pts1)[:, 0:2, :].norm(p=2, dim=1) + 1 / torch.bmm(F_gt.transpose(1, 2),pts2)[:, 0:2, :].norm(p=2, dim=1))
+
+        # print(sed_err_gt[legal_pts].mean(), sed_err[legal_pts].mean())
+        return sed_err[legal_pts].mean()
+
+
+class SiameseLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.L2Loss = L2Loss(config.LossConf['beta'])
+        self.sed = SymmetricEpipolarDist()
+
+    def forward(self, pred, gt, pts, Ksb):
+        #return self.L2Loss(pred, gt) + self.sed(pred, gt, pts, Ksb) * 10e-3
+        return self.L2Loss(pred, gt)

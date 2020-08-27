@@ -66,10 +66,10 @@ class Trainer:
         n_items = 0
 
         for batch in self.train_dl():
-            xb, yb = to_device(batch, self.device)
+            xb, yb, ptsb, Ksb = to_device(batch, self.device)
             self.opt.zero_grad()
             outputs = self.model(*utils.listify(xb))
-            loss = self.loss_func(outputs, yb)
+            loss = self.loss_func(outputs, yb, ptsb, Ksb)
             self._backward(loss)
             running_loss += loss.item() * len(xb)
             n_items += len(xb)
@@ -89,9 +89,9 @@ class Trainer:
         n_items = 0
 
         for batch in self.valid_dl():
-            xb, yb = to_device(batch, self.device)
+            xb, yb, ptsb, Ksb = to_device(batch, self.device)
             outputs = self.model(*utils.listify(xb))
-            loss = self.loss_func(outputs, yb)
+            loss = self.loss_func(outputs, yb, ptsb, Ksb)
             running_loss += loss.item() * len(xb)
             n_items += len(xb)
             for m in metrics:

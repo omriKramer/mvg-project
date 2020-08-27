@@ -8,6 +8,7 @@ import ImagePairsDataset
 import metrics
 import train
 from models import basic_siamese
+import torch
 
 
 def freeze_except_bn(m: nn.Module):
@@ -22,6 +23,7 @@ def main(args):
     root_dir = Path(__file__).parents[1]
     csv_path = root_dir / 'trainval.csv'
     data = ImagePairsDataset.trainval_ds(args.data, csv_path)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = basic_siamese(arch='34', pretrained=True)
 
     if args.stage == 1:
@@ -38,8 +40,9 @@ def main(args):
         ])
 
     save_clbk = train.SaveCallback.partial(path=root_dir / 'trained_models', name=f'{args.name}-stage{args.stage}')
-    loss_func = partial(metrics.translation_rotation_loss2, normalize=args.normalize)
-    trainer = train.Trainer(model, data, loss_func, opt, callbacks=[save_clbk], show_progress=args.show_progress)
+    # loss_func = partial(metrics.translation_rotation_loss2, normalize=args.normalize)
+    loss_func = metrics.SiameseLoss()
+    trainer = train.Trainer(model, data, loss_func, opt, callbacks=[save_clbk], show_progress=args.show_progress, device=device)
     if args.load:
         trainer.load(args.load, model_only=True)
     trainer.fit(args.epochs, metrics=metrics.RelativePoseMetric())
