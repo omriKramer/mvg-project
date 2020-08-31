@@ -37,13 +37,18 @@ class Siamese(nn.Module):
 
 class Head(nn.Module):
 
-    def __init__(self, nf):
+    def __init__(self, nf, spp=False):
         super().__init__()
-        self.layers = nn.Sequential(
-            basic.AdaptiveConcatPool2d(),
-            basic.Flatten(),
-            *basic.bn_drop_lin(nf * 2, 512, bn=True, p=0.25, actn=nn.ReLU(inplace=True))
-        )
+        if spp:
+            layers = [basic.SPP()]
+            factor = sum(s ** 2 for s in layers[0].output_sizes)
+        else:
+            layers = [basic.AdaptiveConcatPool2d(), basic.Flatten()]
+            factor = 2
+        layers.extend(basic.bn_drop_lin(nf * factor, 512, bn=True, p=0.25, actn=nn.ReLU(inplace=True)))
+        layers.extend(basic.bn_drop_lin(512, 512, bn=True, p=0.25, actn=nn.ReLU(inplace=True)))
+
+        self.layers = nn.Sequential(*layers)
         self.rot_head = nn.Sequential(*basic.bn_drop_lin(512, 4, bn=True, p=0.5))
         self.t_head = nn.Sequential(*basic.bn_drop_lin(512, 3, bn=True, p=0.5))
 
@@ -60,9 +65,9 @@ def resnet_body(arch, pretrained):
     return nn.Sequential(*list(model.children())[:-2])
 
 
-def basic_siamese(arch='34', pretrained=True):
+def basic_siamese(arch='34', pretrained=True, spp=False):
     arch, nf = resnet_dict[arch]
     bb = resnet_body(arch, pretrained)
-    head = Head(nf * 2)
+    head = Head(nf * 2, spp=spp)
     net = Siamese(bb, head)
     return net

@@ -5,16 +5,16 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
-import torchvision.transforms as transforms
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
 from torch.utils.data import Dataset, DataLoader
-import transform
+
 import config
+import transform
 import utils
 
 
-def get_data(pair_path):
+def get_data(pair_path, with_points=True):
     # Get GT
     gt_path = os.path.join(pair_path, 'GT')
     r_gt = R.from_matrix(np.load(os.path.join(gt_path, 'GT_R12.npy')))
@@ -24,6 +24,8 @@ def get_data(pair_path):
     inputs_path = os.path.join(pair_path, 'inputs')
     im1 = Image.open(os.path.join(inputs_path, 'im1.jpg'))
     im2 = Image.open(os.path.join(inputs_path, 'im2.jpg'))
+    if not with_points:
+        return (im1, im2), (t_gt, r_gt)
 
     # Get inputs
     inputs_path = os.path.join(pair_path, 'inputs')
@@ -41,9 +43,9 @@ def get_points(path, R_gt, t_gt, K1_gt, K2_gt):
     pts2 = np.load(os.path.join(path, 'points2.npy'))
 
     F = utils.get_fundamental_mat(torch.from_numpy(t_gt).float().unsqueeze(0),
-                                   torch.from_numpy(R_gt.as_quat()).float().unsqueeze(0),
-                                   torch.from_numpy(K1_gt).float().unsqueeze(0),
-                                   torch.from_numpy(K2_gt).float().unsqueeze(0)).numpy().squeeze()
+                                  torch.from_numpy(R_gt.as_quat()).float().unsqueeze(0),
+                                  torch.from_numpy(K1_gt).float().unsqueeze(0),
+                                  torch.from_numpy(K2_gt).float().unsqueeze(0)).numpy().squeeze()
     pts1, pts2 = cv2.correctMatches(F, pts1[0:2, :, np.newaxis].T, pts2[0:2, :, np.newaxis].T)
     # pts1 = np.vstack((pts1.squeeze().T, np.ones((1, pts1.shape[1]))))
     # pts2 = np.vstack((pts2.squeeze().T, np.ones((1, pts2.shape[1]))))
@@ -67,17 +69,18 @@ def get_points(path, R_gt, t_gt, K1_gt, K2_gt):
 
 
 class ImagePairsDataset(Dataset):
-    def __init__(self, items, path, tfm=transform.to_tensor_and_normalize):
+    def __init__(self, items, path, tfm=transform.to_tensor_and_normalize, with_points=True):
         self.path = Path(path)
         self.items = items
         self.tfm = tfm
+        self.with_points = with_points
 
     def __len__(self):
         return len(self.items)
 
     def __getitem__(self, idx):
         pair_path = self.path / self.items[idx]
-        item = get_data(pair_path)
+        item = get_data(pair_path, with_points=self.with_points)
         if self.tfm:
             item = self.tfm(item)
         return item
@@ -103,13 +106,30 @@ class Data:
         return self._dl(self.valid_ds, shuffle=shuffle, **kwargs)
 
 
-def trainval_ds(path, csv_path, train_tfm=transform.to_tensor_and_normalize, **kwargs):
+def trainval_ds(path, csv_path, train_tfm=transform.to_tensor_and_normalize, with_points=True, **kwargs):
     df = pd.read_csv(csv_path)
     is_val = df['is_val']
     train_items = df['item'][~is_val].tolist()
     val_items = df['item'][is_val].tolist()
 
-    train_ds = ImagePairsDataset(train_items, path, tfm=train_tfm)
-    val_ds = ImagePairsDataset(val_items, path)
+    train_ds = ImagePairsDataset(train_items, path, tfm=train_tfm, with_points=with_points)
+    val_ds = ImagePairsDataset(val_items, path, with_points=with_points)
     data = Data(train_ds, val_ds, **kwargs)
+    return data
+
+
+def get_ds(path, csv_path):
+    df = pd.read_csv(csv_path)
+    items = df['item'].tolist()
+    ds = ImagePairsDataset(items, path, with_points=False)
+    return ds
+
+
+def train_test(data_dir, train_csv, test_csv, **kwargs):
+    data_dir = Path(data_dir)
+    train_path = data_dir / 'TrainingSets'
+    test_path = data_dir / 'test_set'
+    train_ds = get_ds(train_path, train_csv)
+    test_ds = get_ds(test_path, test_csv)
+    data = Data(train_ds, test_ds, **kwargs)
     return data

@@ -14,6 +14,24 @@ class AdaptiveConcatPool2d(nn.Module):
         return torch.cat([self.mp(x), self.ap(x)], 1)
 
 
+class SPP(nn.Module):
+
+    def __init__(self, bins=None):
+        super().__init__()
+        if bins is None:
+            bins = [1, 2, 3, 6]
+        self.pools = nn.ModuleList([nn.AdaptiveAvgPool2d(b) for b in bins])
+
+    @property
+    def output_sizes(self):
+        return [p.output_size for p in self.pools]
+
+    def forward(self, x):
+        out = [p(x).flatten(1) for p in self.pools]
+        out = torch.cat(out, dim=-1)
+        return out
+
+
 def bn_drop_lin(n_in: int, n_out: int, bn: bool = True, p: float = 0., actn=None):
     """Sequence of batchnorm (if `bn`), dropout (with `p`) and linear (`n_in`,`n_out`) layers followed by `actn`."""
     layers = []
